@@ -30,4 +30,6 @@ LOCAL_CXXFLAGS += -DIMGUI_EXCLUDE_MENU
 -- Add this macro to exclude ImGui rendering in-game
 LOCAL_CXXFLAGS += -DIMGUI_EXCLUDE_GAME
 ```
-or more straight-forward you simply use this repository instead which will include the ImGui template and can compile right-away after you have all necessary files that the project needs.
+or more straightforward you simply use this repository instead which will include the ImGui template and can compile right-away after you have all necessary files that the project needs.
+
+This ImGUI can be updated by taking the latest source code from Dear ImGui repository and put all them in "ocornut" folder incase when ImSDK is outdated.
