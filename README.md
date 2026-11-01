@@ -15,7 +15,7 @@ Original ImGui repository: https://github.com/ocornut/imgui
 - [SAUtils](<https://github.com/AndroidModLoader/SAUtils>)
 
 ## ⚙️ Integration
-- Download this repository and put the "imsdk" folder in your project.
+- Download this repository and put the "imsdk" folder (from "ImGuiTemplate" folder) in your project.
 - Now put this line in your "Android.mk" file.
 ```makefile
 LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/imsdk/ocornut/*.cpp) imsdk/core_imgui.cpp
@@ -25,8 +25,9 @@ LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/imsdk/ocornut/*.cpp) imsdk/core_imgu
 these are optional, you can exclude ImGui rendering by defining one of these macros in "Android.mk" file.
 ```makefile
 -- Add this macro to exclude ImGui rendering in-menu
-LOCAL_CXXFLAGS += IMGUI_EXCLUDE_MENU
+LOCAL_CXXFLAGS += -DIMGUI_EXCLUDE_MENU
 
 -- Add this macro to exclude ImGui rendering in-game
-LOCAL_CXXFLAGS += IMGUI_EXCLUDE_GAME
+LOCAL_CXXFLAGS += -DIMGUI_EXCLUDE_GAME
 ```
+or more straight-forward you simply use this repository instead which will include the ImGui template and can compile right-away after you have all necessary files that the project needs.
