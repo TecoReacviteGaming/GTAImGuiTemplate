@@ -1,5 +1,5 @@
 #include "imgui_impl_renderware.h"
-#include "main.h"
+#include "../core_imgui.h"
 
 #include <new>
 #include <cstring>
