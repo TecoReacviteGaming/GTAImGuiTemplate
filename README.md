@@ -12,7 +12,6 @@ Original ImGui repository: https://github.com/ocornut/imgui
 
 ## 📜 Requirements
 - [AML-PSDK](<https://github.com/AndroidModLoader/aml-psdk>)
-- [SAUtils](<https://github.com/AndroidModLoader/SAUtils>)
 
 ## ⚙️ Integration
 - Download this repository and put the "imsdk" folder (from "ImGuiTemplate" folder) in your project.
