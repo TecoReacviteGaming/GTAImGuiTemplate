@@ -1,6 +1,6 @@
 #include <mod/amlmod.h>
 #include <mod/logger.h>
-#include <sautils.h>
+
 #include "core_imgui.h"
 #include "ocornut/imgui_impl_renderware.h"
 
@@ -9,17 +9,14 @@
 #include "aml-psdk/game_sa/entity/Camera.h"
 #include "aml-psdk/game_sa/base/Timer.h"
 #include "aml-psdk/game_sa/engine/OS.h"
-#include "aml-psdk/game_sa/engine/MobileMenu.h"
-
-// game vars
-uintptr_t pGame = 0;
-void* hGame = nullptr;
-ISAUtils* sautils = nullptr;
-eLoadedGame curGame = Unknown;
 
 // ImGUI core code
 namespace
 {
+    uintptr_t g_pGame = 0;
+    void* g_hGame = nullptr;
+    static eGameType g_eGameType = UNKNOWN;
+    
     // ImGUI vars
     ImGuiContext* g_imguiCtx = NULL;
     bool g_bImGuiInitialized = false;
@@ -33,7 +30,7 @@ namespace
     // ImGui core functions
     void InitUI()
     {
-        if (g_bImGuiInitialized || g_imguiCtx || !g_buildCall) return;
+        if (g_bImGuiInitialized || g_imguiCtx) return;
         g_imguiCtx = ImGui::CreateContext();
         ImGui_ImplRenderWare_Init();
         nDisplayX = RsGlobal.maximumWidth;
@@ -47,7 +44,7 @@ namespace
     }
     void RenderUI()
     {
-        if (!g_bImGuiInitialized || !g_imguiCtx || !g_renderCall) return;
+        if (!g_bImGuiInitialized || !g_imguiCtx) return;
         ImGui_ImplRenderWare_NewFrame(); 
         ImGui::NewFrame();
         g_renderCall();
@@ -58,10 +55,10 @@ namespace
     void ShutdownUI()
     {
         if (!g_bImGuiInitialized || !g_imguiCtx) return;
-        g_bImGuiInitialized = false;
         ImGui_ImplRenderWare_ShutDown();
         ImGui::DestroyContext(g_imguiCtx);
         g_imguiCtx = NULL;
+        g_bImGuiInitialized = false;
     }
     bool IsTouchedOverUI(float x, float y)
     {
@@ -77,169 +74,176 @@ namespace
         }
         return false;
     }
-    bool IsInitialized()
-    {
-        return g_bImGuiInitialized;
-    }
-}
 
-// touch system
-static char g_nClearMousePos = 0;
-static bool g_bIgnoredFingers[10] = {false};
-static bool g_bFingerOnUI[10] = {false};
-static uint8_t g_bFingerAsMouse = 0xFF;
-static bool g_bAllowGuiTouchOnMenu = false;
-DECL_HOOKv(TouchEvent, int actionType, int trackNum, int x, int y)
-{
-    if (!IsInitialized() || trackNum < 0 || trackNum >= 10)
+    // touch system
+    static char g_nClearMousePos = 0;
+    static bool g_bIgnoredFingers[10] = {false};
+    static bool g_bFingerOnUI[10] = {false};
+    static uint8_t g_bFingerAsMouse = 0xFF;
+    static bool g_bAllowGuiTouchOnMenu = false;
+    DECL_HOOKv(TouchEvent, int actionType, int trackNum, int x, int y)
     {
-        TouchEvent(actionType, trackNum, x, y);
-        return;
-    }
-    ImGuiIO& io = ImGui::GetIO();
-
-    switch (actionType)
-    {
-        case 1: // touch release
+        if (!g_bImGuiInitialized || trackNum < 0 || trackNum >= 10)
         {
-            if (g_bFingerAsMouse == trackNum)
+            TouchEvent(actionType, trackNum, x, y);
+            return;
+        }
+        ImGuiIO& io = ImGui::GetIO();
+    
+        switch (actionType)
+        {
+            case 1: // touch release
             {
-                g_nClearMousePos = 3;
-                io.AddMouseButtonEvent(0, false);
-                g_bFingerAsMouse = 0xFF;
+                if (g_bFingerAsMouse == trackNum)
+                {
+                    g_nClearMousePos = 3;
+                    io.AddMouseButtonEvent(0, false);
+                    g_bFingerAsMouse = 0xFF;
+                }
+                break;
             }
-            break;
+            
+            case 2: // touch push
+            {
+                const bool bCanUseUI = (CTimer::IsPaused() == g_bAllowGuiTouchOnMenu && TheCamera.GetScreenFadeStatus() != 2);
+                g_bFingerOnUI[trackNum] = bCanUseUI && (io.WantTextInput || IsTouchedOverUI((float)x, (float)y));
+                if (g_bFingerOnUI[trackNum] && g_bFingerAsMouse == 0xFF)
+                {
+                    io.AddMousePosEvent((float)x, (float)y);
+                    io.AddMouseButtonEvent(0, true);
+                    g_bFingerAsMouse = trackNum;
+                }
+                break;
+            }
+    
+            case 3: // touch move
+            {
+                if (g_bFingerAsMouse == trackNum)
+                    io.AddMousePosEvent((float)x, (float)y);
+                break;
+            }
         }
         
-        case 2: // touch push
+        const bool swallow = g_bFingerOnUI[trackNum];
+        if (actionType == 1) g_bFingerOnUI[trackNum] = false;
+        if (!swallow) TouchEvent(actionType, trackNum, x, y);
+    }
+    
+    // keyboard system
+    int* NVtoKK;
+    char *KKtoChar, *KKtoShiftedChar;
+    DECL_HOOKv(KeyboardEvent, bool pushed, int keyNum, int ctrl_or_shift, int alwaysZero)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        if (!io.WantTextInput)
         {
-            const bool bCanUseUI = (CTimer::IsPaused() == g_bAllowGuiTouchOnMenu && TheCamera.GetScreenFadeStatus() != 2);
-            g_bFingerOnUI[trackNum] = bCanUseUI && (io.WantTextInput || IsTouchedOverUI((float)x, (float)y));
-            if (g_bFingerOnUI[trackNum] && g_bFingerAsMouse == 0xFF)
-            {
-                io.AddMousePosEvent((float)x, (float)y);
-                io.AddMouseButtonEvent(0, true);
-                g_bFingerAsMouse = trackNum;
-            }
-            break;
+            AND_KeyboardEvent(pushed, keyNum, ctrl_or_shift, alwaysZero);
+            return;
         }
-
-        case 3: // touch move
+    
+        switch (keyNum)
         {
-            if (g_bFingerAsMouse == trackNum)
-                io.AddMousePosEvent((float)x, (float)y);
-            break;
+            case 3:
+                io.AddKeyEvent(ImGuiKey_Enter, pushed);
+                break;
+            
+            case 4:
+                io.AddKeyEvent(ImGuiKey_Backspace, pushed);
+                break;
+    
+            default:
+                if (pushed && keyNum >= 0)
+                {
+                    char sym = 0;
+                    if (ctrl_or_shift <= 0) sym = KKtoChar[NVtoKK[keyNum]];
+                    else sym = KKtoShiftedChar[NVtoKK[keyNum]];
+                    if (sym != 0) io.AddInputCharacter(sym);
+                }
+                break;
         }
     }
     
-    const bool swallow = g_bFingerOnUI[trackNum];
-    if (actionType == 1) g_bFingerOnUI[trackNum] = false;
-    if (!swallow) TouchEvent(actionType, trackNum, x, y);
+    // ImGui rendering core
+    static bool g_bLastTextInput = false;
+    static std::string g_lastTextPasted;
+    void RenderImGui()
+    {
+        RenderUI();
+        ImGuiIO& io = ImGui::GetIO();
+        if (g_nClearMousePos > 0 && --g_nClearMousePos == 0) io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
+        if (io.WantTextInput != g_bLastTextInput)
+        {
+            OS_KeyboardRequest((io.WantTextInput && !OS_KeyboardIsSoftVisible()) ? 1 : 0);
+            g_bLastTextInput = io.WantTextInput;
+        }
+    }
 }
 
-// keyboard system
-int* NVtoKK;
-char *KKtoChar, *KKtoShiftedChar;
-DECL_HOOKv(KeyboardEvent, bool pushed, int keyNum, int ctrl_or_shift, int alwaysZero)
+// ImSDK class functions
+void ImSDK::CreateImGUI(ImSDKCallback buildBase, ImSDKCallback renderBase)
 {
-    ImGuiIO& io = ImGui::GetIO();
-    if (!io.WantTextInput)
+    g_pGame = aml->GetLib("libGTASA.so");
+    g_hGame = aml->GetLibHandle("libGTASA.so");
+    g_eGameType = GTA_SA;
+    if (!g_pGame || !g_hGame)
     {
-        AND_KeyboardEvent(pushed, keyNum, ctrl_or_shift, alwaysZero);
+        logger->Error("Unsupported game, expected GTA game!");
         return;
     }
 
-    switch (keyNum)
-    {
-        case 3:
-            io.AddKeyEvent(ImGuiKey_Enter, pushed);
-            break;
-        
-        case 4:
-            io.AddKeyEvent(ImGuiKey_Backspace, pushed);
-            break;
-
-        default:
-            if (pushed && keyNum >= 0)
-            {
-                char sym = 0;
-                if (ctrl_or_shift <= 0) sym = KKtoChar[NVtoKK[keyNum]];
-                else sym = KKtoShiftedChar[NVtoKK[keyNum]];
-                if (sym != 0) io.AddInputCharacter(sym);
-            }
-            break;
-    }
-}
-
-// ImGui rendering core
-static bool g_bLastTextInput = false;
-static std::string g_lastTextPasted;
-void RenderImGui()
-{
-    RenderUI();
-    ImGuiIO& io = ImGui::GetIO();
-    if (g_nClearMousePos > 0 && --g_nClearMousePos == 0) io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
-    if (io.WantTextInput != g_bLastTextInput)
-    {
-        OS_KeyboardRequest((io.WantTextInput && !OS_KeyboardIsSoftVisible()) ? 1 : 0);
-        g_bLastTextInput = io.WantTextInput;
-    }
-}
-
-// initiator
-void InitiateImGUI(ImSDKCallback buildBase, ImSDKCallback renderBase)
-{
+    // ImSDK callbacks
     g_buildCall = std::move(buildBase);
     g_renderCall = std::move(renderBase);
     if (!g_buildCall || !g_renderCall)
     {
-        logger->Error("Needs build/render callback");
-        return;
-    }
-    
-    sautils = (ISAUtils*)GetInterface("SAUtils");
-    if (!sautils)
-    {
-        logger->Error("SAUtils failed to load!");
-        return;
-    }
-    
-    curGame = sautils->GetLoadedGame();
-    if (curGame == GTASA_2_00 || curGame == GTASA_2_10)
-    {
-        pGame = aml->GetLib("libGTASA.so");
-        hGame = aml->GetLibHandle("libGTASA.so");
-    }
-    else
-    {
-        logger->Error("Unsupported game, expected GTA SA game!");
+        logger->Error("The build or render callback is invalid.");
         return;
     }
 
     // game vars
-    SET_TO(NVtoKK, aml->GetSym(hGame, "NVtoKK"));
-    SET_TO(KKtoChar, aml->GetSym(hGame, "KKtoChar"));
-    SET_TO(KKtoShiftedChar, aml->GetSym(hGame, "KKtoShiftedChar"));
+    SET_TO(NVtoKK, aml->GetSym(g_hGame, "NVtoKK"));
+    SET_TO(KKtoChar, aml->GetSym(g_hGame, "KKtoChar"));
+    SET_TO(KKtoShiftedChar, aml->GetSym(g_hGame, "KKtoShiftedChar"));
     
-    // modern hooks
-    Events::initRwEvent.after += InitUI;
-#ifndef IMGUI_EXCLUDE_GAME
-    Events::drawingEvent.after += []()
-    {
-        g_bAllowGuiTouchOnMenu = false;
-        RenderImGui();
-    };
-#endif
-#ifndef IMGUI_EXCLUDE_MENU
-    Events::menuDrawingEvent.after += []()
-    {
-        g_bAllowGuiTouchOnMenu = true;
-        RenderImGui();
-    };
-#endif
-    Events::shutdownRwEvent.before += ShutdownUI;
-
-    // ancient hooks
+    // game hooks
     HOOK(TouchEvent, AND_TouchEvent);
     HOOK(KeyboardEvent, AND_KeyboardEvent);
+
+    if (g_eGameType == GTA_SA)
+    {
+        Events::initRwEvent.after += InitUI;
+#if !defined(IMGUI_EXCLUDE_GAME)
+        Events::drawingEvent.after += []()
+        {
+            g_bAllowGuiTouchOnMenu = false;
+            RenderImGui();
+        };
+#elif !defined(IMGUI_EXCLUDE_MENU)
+        Events::menuDrawingEvent.after += []()
+        {
+            g_bAllowGuiTouchOnMenu = true;
+            RenderImGui();
+        };
+#endif
+        Events::shutdownRwEvent.before += ShutdownUI;
+    }
+}
+
+void ImSDK::DestroyImGui()
+{
+    if (!g_bImGuiInitialized) return;
+    ShutdownUI();
+    g_bImGuiInitialized = false;
+}
+
+void ImSDK::NewCallback(ImSDKCallback newBuildBase, ImSDKCallback newRenderBase)
+{
+    if (newBuildBase)
+    {
+        g_buildCall = std::move(newBuildBase);
+        g_buildCall();
+    }
+    
+    if (newRenderBase)
+        g_renderCall = std::move(newRenderBase);
 }

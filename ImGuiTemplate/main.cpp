@@ -5,7 +5,6 @@
 MYMOD(net.ocornut.teco.imsdk, ImGui SDK, 1.0, ocornut & TecoReacvite)
 BEGIN_DEPLIST()
     ADD_DEPENDENCY_VER(net.rusjj.aml, 1.4.0)
-    ADD_DEPENDENCY_VER(net.rusjj.gtasa.utils, 1.6)
 END_DEPLIST()
 
 // OWN vars
@@ -14,7 +13,6 @@ ImGuiTextBuffer logBuf;
 bool ScrollToBottom = false;
 float g_UIScale = 2.5f;
 
-// OWN funcs
 void AddGuiLog(const char* fmt, ...)
 {
     va_list args;
@@ -29,8 +27,10 @@ void AddGuiLog(const char* fmt, ...)
 ON_MOD_LOAD()
 {
     logger->SetTag("ImGui Template");
-    InitiateImGUI(
-        [&]()
+
+    // The usage is very simple... a lot
+    ImSDK::CreateImGUI(
+        [&]() // initial ImGui (fonts, window size, etc...)
         {
             ImGuiIO& io = ImGui::GetIO();
             ImGuiStyle& style = ImGui::GetStyle();
@@ -40,41 +40,38 @@ ON_MOD_LOAD()
             config.SizePixels = roundf(13.0f * g_UIScale);
             io.Fonts->AddFontDefault(&config);
         },
-        [&]()
+        [&]() // render ImGui (where stuffs will be rendered)
         {
             ImGuiIO& io = ImGui::GetIO();
             ImGui::SetNextWindowBgAlpha(0.70f);
             ImGui::SetNextWindowSizeConstraints(ImVec2(io.DisplaySize.x * 0.23f, io.DisplaySize.y * 0.36f), ImVec2(io.DisplaySize.x, io.DisplaySize.y));
-        
-            ImGui::Begin("ImGUI Template", NULL, ImGuiWindowFlags_None);
-            ImGui::Text("ImGUI FPS: %.2f", io.Framerate);
-            ImGui::BeginChild("Scrolling", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), true, ImGuiWindowFlags_HorizontalScrollbar);
-            ImGui::TextUnformatted(logBuf.begin());
-            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
-            if (ScrollToBottom)
+            ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
+            if (ImGui::Begin("ImGui Template"))
             {
-                ImGui::SetScrollHereY(1.00f);
-                ScrollToBottom = false;
+                ImGui::Text("ImGUI FPS: %.2f", io.Framerate);
+                ImGui::BeginChild("Scrolling", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), true, ImGuiWindowFlags_HorizontalScrollbar);
+                ImGui::TextUnformatted(logBuf.begin());
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
+                if (ScrollToBottom)
+                {
+                    ImGui::SetScrollHereY(1.00f);
+                    ScrollToBottom = false;
+                }
+                ImGui::EndChild();
+                if (ImGui::Button("Send") && buf[0] != '\0')
+                {
+                    AddGuiLog("user: %s", buf);
+                    memset(buf, 0, sizeof(buf));
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Clear")) logBuf.clear();
+                ImGui::SameLine();
+                ImGui::PushItemWidth(io.DisplaySize.x * 0.15f);
+                ImGui::InputText("", buf, IM_ARRAYSIZE(buf));
+                ImGui::PopItemWidth();
+                ImGui::SameLine();
+                ImGui::Text("%d/%d max", (int)std::strlen(buf), (int)sizeof(buf));
             }
-            ImGui::EndChild();
-            
-            if (ImGui::Button("Send") && buf[0] != '\0')
-            {
-                AddGuiLog("host: %s", buf);
-                memset(buf, 0, sizeof(buf));
-            }
-            
-            ImGui::SameLine();
-            if (ImGui::Button("Clear")) logBuf.clear();
-            
-            ImGui::SameLine();
-            ImGui::PushItemWidth(io.DisplaySize.x * 0.15f);
-            ImGui::InputText("", buf, IM_ARRAYSIZE(buf));
-            ImGui::PopItemWidth();
-            
-            ImGui::SameLine();
-            ImGui::Text("%d/%d max", (int)std::strlen(buf), (int)sizeof(buf));
-        
             ImGui::End();
         }
     );
