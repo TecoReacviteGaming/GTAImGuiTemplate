@@ -1,3 +1,9 @@
-[submodule "ImGuiTemplate/aml-psdk-gta"]
-	path = ImGuiTemplate/aml-psdk-gta
+[submodule "aml-psdk-gta"]
+	path = aml-psdk-gta
+	url = https://github.com/AndroidModLoader/aml-psdk.git
+[submodule "SA_Template/aml-psdk-gtasa"]
+	path = SA_Template/aml-psdk-gtasa
+	url = https://github.com/AndroidModLoader/aml-psdk.git
+[submodule "VC_Template/aml-psdk-gtavc"]
+	path = VC_Template/aml-psdk-gtavc
 	url = https://github.com/AndroidModLoader/aml-psdk.git

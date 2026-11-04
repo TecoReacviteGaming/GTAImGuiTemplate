@@ -1,9 +1,17 @@
 #include "imgui_impl_renderware.h"
-#include "../core_imgui.h"
+
+#include <aml-psdk/game_vc/plugin.h>
+#include <aml-psdk/renderware/RwBase.h>
+#include <aml-psdk/renderware/RwImage.h>
+#include <aml-psdk/renderware/RwRaster.h>
+#include <aml-psdk/renderware/RwRender.h>
+#include <aml-psdk/gta_base/DrawVertices.h>
+#include <aml-psdk/game_vc/engine/Sprite2d.h>
 
 #include <new>
 #include <cstring>
 #include <algorithm>
+#include <vector>
 
 static_assert(sizeof(ImDrawIdx) == sizeof(RwImVertexIndex), "ImDrawIdx must be 16-bit to match RwImVertexIndex");
 RwRaster*     g_FontRaster       = nullptr;
@@ -42,7 +50,7 @@ static inline void SetupRenderState()
 bool ImGui_ImplRenderWare_Init()
 {
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2((float)RsGlobal.maximumWidth, (float)RsGlobal.maximumHeight);
+    io.DisplaySize = ImVec2((float)RsGlobal->maximumWidth, (float)RsGlobal->maximumHeight);
     return true;
 }
 void ImGui_ImplRenderWare_ShutDown()
@@ -62,8 +70,9 @@ void ImGui_ImplRenderWare_NewFrame()
         ImGui_ImplRenderWare_CreateDeviceObjects();
 
     ImGuiIO& io = ImGui::GetIO();
-    io.DisplaySize = ImVec2((float)RsGlobal.maximumWidth, (float)RsGlobal.maximumHeight);
+    io.DisplaySize = ImVec2((float)RsGlobal->maximumWidth, (float)RsGlobal->maximumHeight);
 }
+
 void ImGui_ImplRenderWare_RenderDrawData(ImDrawData* draw_data)
 {
     if (!draw_data || draw_data->CmdListsCount == 0 || draw_data->TotalVtxCount <= 0) return;
@@ -131,16 +140,12 @@ void ImGui_ImplRenderWare_RenderDrawData(ImDrawData* draw_data)
                 pcmd->ClipRect.w <= pcmd->ClipRect.y)
                 continue;
 
-            CRect scissor;
-            scissor.left   = pcmd->ClipRect.x;
-            scissor.bottom = pcmd->ClipRect.w;
-            scissor.right  = pcmd->ClipRect.z;
-            scissor.top    = pcmd->ClipRect.y;
+            CRect scissor(pcmd->ClipRect.x, pcmd->ClipRect.y, pcmd->ClipRect.z, pcmd->ClipRect.w);
             if (!scissorValid ||
                 scissor.left != lastScissor.left   || scissor.right != lastScissor.right ||
                 scissor.top  != lastScissor.top    || scissor.bottom != lastScissor.bottom)
             {
-                CWidget::SetScissor(scissor);
+                //CWidget::SetScissor(scissor);
                 lastScissor  = scissor;
                 scissorValid = true;
             }
@@ -160,8 +165,10 @@ void ImGui_ImplRenderWare_RenderDrawData(ImDrawData* draw_data)
     }
 
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)0);
-    CWidget::SetScissor(CRect(0.0f, 0.0f, 0.0f, 0.0f));
+    CRect scissor(0.0f, 0.0f, 0.0f, 0.0f);
+    //CWidget::SetScissor(scissor);
 }
+
 bool ImGui_ImplRenderWare_CreateDeviceObjects()
 {
     if (g_FontRaster) return true;
@@ -174,8 +181,7 @@ bool ImGui_ImplRenderWare_CreateDeviceObjects()
     if (!pxs || width <= 0 || height <= 0 || bpp != 4) return false;
     RwImage* img = RwImageCreate(width, height, bpp * 8);
     if (!img) return false;
-    
-    RwImageAllocatePixels(img);
+
     if (!RwImageAllocatePixels(img) || !img->cpPixels)
     {
         RwImageDestroy(img);
