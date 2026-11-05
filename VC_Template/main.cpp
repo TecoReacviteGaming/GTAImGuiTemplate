@@ -22,7 +22,7 @@ END_DEPLIST()
 // OWN vars
 uintptr_t g_pGame = 0;
 void* g_hGame = nullptr;
-RsGlobalType* RsGlobal;
+RsGlobalType* RsGlobal = nullptr;
 
 char buf[256] = "";
 ImGuiTextBuffer logBuf;
@@ -219,7 +219,7 @@ ON_MOD_LOAD()
     SET_TO(NVtoKK, aml->GetSym(g_hGame, "NVtoKK"));
     SET_TO(KKtoChar, aml->GetSym(g_hGame, "KKtoChar"));
     SET_TO(KKtoShiftedChar, aml->GetSym(g_hGame, "KKtoShiftedChar"));
-    SET_TO(RsGlobal, (RsGlobalType*)aml->GetSym(g_hGame, "RsGlobal"));
+    SET_TO(RsGlobal, (RsGlobalType*)(g_pGame + BYBIT(0x714F08, 0x991C20)));
     SET_TO(OS_KeyboardRequest, aml->GetSym(g_hGame, "_Z18OS_KeyboardRequesti"));
     SET_TO(OS_KeyboardIsSoftVisible, aml->GetSym(g_hGame, "_Z24OS_KeyboardIsSoftVisiblev"));
 
