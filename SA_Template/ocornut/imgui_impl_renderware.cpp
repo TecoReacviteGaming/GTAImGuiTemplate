@@ -19,6 +19,7 @@ RwRaster*     g_FontRaster       = nullptr;
 RwIm2DVertex* g_pVB              = nullptr;
 unsigned int  g_VertexBufferSize = 0;
 
+// helper
 static bool EnsureVertexBuffer(unsigned int needed)
 {
     if (g_pVB && g_VertexBufferSize >= needed) return true;
@@ -32,22 +33,8 @@ static bool EnsureVertexBuffer(unsigned int needed)
     g_VertexBufferSize = newSize;
     return true;
 }
-static inline void SetupRenderState()
-{
-    RwRenderStateSet(rwRENDERSTATEZTESTENABLE,            (void*)0);
-    RwRenderStateSet(rwRENDERSTATEZWRITEENABLE,           (void*)0);
-    RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE,      (void*)1);
-    RwRenderStateSet(rwRENDERSTATESRCBLEND,               (void*)rwBLENDSRCALPHA);
-    RwRenderStateSet(rwRENDERSTATEDESTBLEND,              (void*)rwBLENDINVSRCALPHA);
-    RwRenderStateSet(rwRENDERSTATEFOGENABLE,              (void*)0);
-    RwRenderStateSet(rwRENDERSTATECULLMODE,               (void*)rwCULLMODECULLNONE);
-    RwRenderStateSet(rwRENDERSTATEBORDERCOLOR,            (void*)0);
-    RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION,      (void*)rwALPHATESTFUNCTIONGREATER);
-    RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF,   (void*)2);
-    RwRenderStateSet(rwRENDERSTATETEXTUREFILTER,          (void*)rwFILTERLINEAR);
-    RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS,         (void*)rwTEXTUREADDRESSCLAMP);
-}
 
+// exposed funcs
 bool ImGui_ImplRenderWare_Init()
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -106,7 +93,18 @@ void ImGui_ImplRenderWare_RenderDrawData(ImDrawData* draw_data)
 
     auto ResetState = [&]()
     {
-        SetupRenderState();
+        RwRenderStateSet(rwRENDERSTATEZTESTENABLE,            (void*)0);
+        RwRenderStateSet(rwRENDERSTATEZWRITEENABLE,           (void*)0);
+        RwRenderStateSet(rwRENDERSTATEVERTEXALPHAENABLE,      (void*)1);
+        RwRenderStateSet(rwRENDERSTATESRCBLEND,               (void*)rwBLENDSRCALPHA);
+        RwRenderStateSet(rwRENDERSTATEDESTBLEND,              (void*)rwBLENDINVSRCALPHA);
+        RwRenderStateSet(rwRENDERSTATEFOGENABLE,              (void*)0);
+        RwRenderStateSet(rwRENDERSTATECULLMODE,               (void*)rwCULLMODECULLNONE);
+        RwRenderStateSet(rwRENDERSTATEBORDERCOLOR,            (void*)0);
+        RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTION,      (void*)rwALPHATESTFUNCTIONGREATER);
+        RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF,   (void*)2);
+        RwRenderStateSet(rwRENDERSTATETEXTUREFILTER,          (void*)rwFILTERLINEAR);
+        RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS,         (void*)rwTEXTUREADDRESSCLAMP);
         boundTex     = (void*)-1;
         scissorValid = false;
     };

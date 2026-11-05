@@ -41,10 +41,6 @@ void AddGuiLog(const char* fmt, ...)
 
 // ImGUI vars
 ImGuiContext* g_imguiCtx = NULL;
-ImVec2 displaySize;
-ImVec2 zeroVec(0,0);
-static float flScaleX, flScaleY;
-static int nDisplayX, nDisplayY;
 bool IsTouchedOverUI(float x, float y)
 {
     if (!g_imguiCtx) return false;
@@ -231,12 +227,6 @@ ON_MOD_LOAD()
         if (g_imguiCtx) return;
         g_imguiCtx = ImGui::CreateContext();
         ImGui_ImplRenderWare_Init();
-        nDisplayX = RsGlobal->maximumWidth;
-        nDisplayY = RsGlobal->maximumHeight;
-        flScaleX = nDisplayY * 0.00052083333f;
-        flScaleY = nDisplayY * 0.00092592592f;
-        displaySize.x = nDisplayX;
-        displaySize.y = nDisplayY;
 
         // your initial ImGui code here
         ImGuiIO& io = ImGui::GetIO();
