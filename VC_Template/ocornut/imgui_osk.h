@@ -350,8 +350,8 @@ namespace ImGuiOSK
                     }
                     else if (s.shift)
                     {
-                        // 230ms delay double-tap to match my goon keyboard
-                        if (s.lastShiftTap >= 0.0f && now - s.lastShiftTap <= 0.230f)
+                        // 420ms delay for Vice City
+                        if (s.lastShiftTap >= 0.0f && now - s.lastShiftTap <= 0.420f)
                         {
                             // Quick second tap -> Caps Lock on
                             s.caps = true;
