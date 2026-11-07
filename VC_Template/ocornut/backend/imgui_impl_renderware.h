@@ -1,6 +1,6 @@
 #pragma once
 
-#include "imgui.h"
+#include <ocornut/imgui.h>
 
 struct RsGlobalType
 {

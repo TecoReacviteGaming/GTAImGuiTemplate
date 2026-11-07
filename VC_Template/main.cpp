@@ -1,7 +1,8 @@
 #include <mod/amlmod.h>
 #include <mod/logger.h>
-#include "ocornut/imgui_internal.h"
-#include "ocornut/imgui_impl_renderware.h"
+#include <ocornut/imgui_internal.h>
+#include <ocornut/backend/imgui_impl_renderware.h>
+#include <ocornut/imgui_osk.h>
 
 // AML PSDK
 #include <aml-psdk/game_vc/plugin.h>
@@ -108,44 +109,7 @@ DECL_HOOKv(TouchEvent, int actionType, int trackNum, int x, int y)
     if (actionType == 1) g_bFingerOnUI[trackNum] = false;
     if (!swallow) TouchEvent(actionType, trackNum, x, y);
 }
-// keyboard system
-int* NVtoKK;
-char *KKtoChar, *KKtoShiftedChar;
-void (*OS_KeyboardRequest)(bool);
-bool (*OS_KeyboardIsSoftVisible)();
-DECL_HOOKv(KeyboardEvent, bool pushed, int keyNum, int ctrl_or_shift, int alwaysZero)
-{
-    ImGuiIO& io = ImGui::GetIO();
-    if (!io.WantTextInput)
-    {
-        KeyboardEvent(pushed, keyNum, ctrl_or_shift, alwaysZero);
-        return;
-    }
-    
-    switch (keyNum)
-    {
-        case 3:
-            io.AddKeyEvent(ImGuiKey_Enter, pushed);
-            break;
-    
-        case 4:
-            io.AddKeyEvent(ImGuiKey_Backspace, pushed);
-            break;
-    
-        default:
-            if (pushed && keyNum >= 0)
-            {
-                char sym = 0;
-                if (ctrl_or_shift <= 0) sym = KKtoChar[NVtoKK[keyNum]];
-                else sym = KKtoShiftedChar[NVtoKK[keyNum]];
-                if (sym != 0) io.AddInputCharacter(sym);
-            }
-            break;
-    }
-}
 // ImGui rendering core
-static bool g_bLastTextInput = false;
-static std::string g_lastTextPasted;
 void RenderImGui()
 {
     if (!g_imguiCtx) return;
@@ -154,14 +118,18 @@ void RenderImGui()
     ImGui_ImplRenderWare_NewFrame(); 
     ImGui::NewFrame();
 
+    // our keyboard, should be first at all times
+    ImGuiOSK::ProcessImGuiKeyboard();
+
     // your render ImGui code here
-    ImGui::SetNextWindowBgAlpha(0.70f);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(io.DisplaySize.x * 0.23f, io.DisplaySize.y * 0.36f), ImVec2(io.DisplaySize.x, io.DisplaySize.y));
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(io.DisplaySize.x * 0.23f, io.DisplaySize.y * 0.47f), ImVec2(io.DisplaySize.x, io.DisplaySize.y));
     ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("VC ImGui Template"))
+    if (ImGui::Begin("ImGui Template (VC)"))
     {
+        ImGui::Text("ImGUI version: %s", ImGui::GetVersion());
         ImGui::Text("ImGUI FPS: %.2f", io.Framerate);
-        ImGui::BeginChild("Scrolling", ImVec2(0, -ImGui::GetFrameHeightWithSpacing()), true, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("Scrolling", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() - 20.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
         ImGui::TextUnformatted(logBuf.begin());
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
         if (ScrollToBottom)
@@ -170,15 +138,15 @@ void RenderImGui()
             ScrollToBottom = false;
         }
         ImGui::EndChild();
-        if (ImGui::Button("Send") && buf[0] != '\0')
+        if (ImGui::Button("Push") && buf[0] != '\0')
         {
-            AddGuiLog("user: %s", buf);
+            AddGuiLog("imgui-log: %s", buf);
             memset(buf, 0, sizeof(buf));
         }
         ImGui::SameLine();
         if (ImGui::Button("Clear")) logBuf.clear();
         ImGui::SameLine();
-        ImGui::PushItemWidth(io.DisplaySize.x * 0.15f);
+        ImGui::PushItemWidth(io.DisplaySize.x * 0.12f);
         ImGui::InputText("", buf, IM_ARRAYSIZE(buf));
         ImGui::PopItemWidth();
         ImGui::SameLine();
@@ -190,13 +158,7 @@ void RenderImGui()
     ImGui::EndFrame();
     ImGui::Render();
     ImGui_ImplRenderWare_RenderDrawData(ImGui::GetDrawData());
-
     if (g_nClearMousePos > 0 && --g_nClearMousePos == 0) io.AddMousePosEvent(-FLT_MAX, -FLT_MAX);
-    if (io.WantTextInput != g_bLastTextInput)
-    {
-        OS_KeyboardRequest((io.WantTextInput && !OS_KeyboardIsSoftVisible()) ? 1 : 0);
-        g_bLastTextInput = io.WantTextInput;
-    }
 }
 
 // main
@@ -212,16 +174,10 @@ ON_MOD_LOAD()
     }
 
     // game vars
-    SET_TO(NVtoKK, aml->GetSym(g_hGame, "NVtoKK"));
-    SET_TO(KKtoChar, aml->GetSym(g_hGame, "KKtoChar"));
-    SET_TO(KKtoShiftedChar, aml->GetSym(g_hGame, "KKtoShiftedChar"));
     SET_TO(RsGlobal, (RsGlobalType*)(g_pGame + BYBIT(0x714F08, 0x991C20)));
-    SET_TO(OS_KeyboardRequest, aml->GetSym(g_hGame, "_Z18OS_KeyboardRequesti"));
-    SET_TO(OS_KeyboardIsSoftVisible, aml->GetSym(g_hGame, "_Z24OS_KeyboardIsSoftVisiblev"));
-
+    
     // game hooks
     HOOK(TouchEvent, aml->GetSym(g_hGame, "_Z14AND_TouchEventiiii"));
-    HOOK(KeyboardEvent, aml->GetSym(g_hGame, "_Z17AND_KeyboardEventbiib"));
     Events::initRwEvent.after += []()
     {
         if (g_imguiCtx) return;

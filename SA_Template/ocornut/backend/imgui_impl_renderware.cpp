@@ -8,30 +8,79 @@
 #include <aml-psdk/renderware/RwRender.h>
 #include <aml-psdk/gta_base/DrawVertices.h>
 #include <aml-psdk/game_sa/engine/Sprite2d.h>
-#include <aml-psdk/game_sa/other/Widgets.h>
 
 #include <new>
 #include <cstring>
 #include <algorithm>
+#include <vector>
 
 static_assert(sizeof(ImDrawIdx) == sizeof(RwImVertexIndex), "ImDrawIdx must be 16-bit to match RwImVertexIndex");
 RwRaster*     g_FontRaster       = nullptr;
 RwIm2DVertex* g_pVB              = nullptr;
 unsigned int  g_VertexBufferSize = 0;
+static std::vector<RwIm2DVertex>    g_Verts;
+static std::vector<RwImVertexIndex> g_Idx;
+struct ClipVert { float f[8]; };
 
 // helper
-static bool EnsureVertexBuffer(unsigned int needed)
+static inline ClipVert MakeClipVert(const ImDrawVert& v)
 {
-    if (g_pVB && g_VertexBufferSize >= needed) return true;
-
-    unsigned int newSize = std::max(needed + needed / 2, 5000u);
-    RwIm2DVertex* newVB = new (std::nothrow) RwIm2DVertex[newSize];
-    if (!newVB) return false;
-
-    delete[] g_pVB;
-    g_pVB = newVB;
-    g_VertexBufferSize = newSize;
-    return true;
+    ClipVert c;
+    c.f[0] = v.pos.x; c.f[1] = v.pos.y;
+    c.f[2] = v.uv.x;  c.f[3] = v.uv.y;
+    c.f[4] = (float)((v.col >>  0) & 0xFF);
+    c.f[5] = (float)((v.col >>  8) & 0xFF);
+    c.f[6] = (float)((v.col >> 16) & 0xFF);
+    c.f[7] = (float)((v.col >> 24) & 0xFF);
+    return c;
+}
+static inline unsigned int To8(float f)
+{
+    return (unsigned int)(f < 0.f ? 0.f : (f > 255.f ? 255.f : f + 0.5f));
+}
+static inline void PushVert(const ClipVert& c, float screenZ, float recipZ)
+{
+    RwIm2DVertex v;
+    memset(&v, 0, sizeof(v));
+    RwIm2DVertexSetScreenX(&v, c.f[0]);
+    RwIm2DVertexSetScreenY(&v, c.f[1]);
+    RwIm2DVertexSetScreenZ(&v, screenZ);
+    RwIm2DVertexSetRecipCameraZ(&v, recipZ);
+    RwIm2DVertexSetU(&v, c.f[2], recipZ);
+    RwIm2DVertexSetV(&v, c.f[3], recipZ);
+    v.emissiveColor = To8(c.f[4]) | (To8(c.f[5]) << 8) | (To8(c.f[6]) << 16) | (To8(c.f[7]) << 24);
+    g_Idx.push_back((RwImVertexIndex)g_Verts.size());
+    g_Verts.push_back(v);
+}
+static int ClipPoly(const ClipVert* in, int n, ClipVert* out, int axis, float bound, bool keepGreater)
+{
+    int m = 0;
+    for (int i = 0; i < n; i++)
+    {
+        const ClipVert& a = in[i];
+        const ClipVert& b = in[(i + 1) % n];
+        float da = keepGreater ? a.f[axis] - bound : bound - a.f[axis];
+        float db = keepGreater ? b.f[axis] - bound : bound - b.f[axis];
+        bool aIn = da >= 0.f, bIn = db >= 0.f;
+        if (aIn) out[m++] = a;
+        if (aIn != bIn)
+        {
+            float t = da / (da - db);
+            ClipVert c;
+            for (int k = 0; k < 8; k++) c.f[k] = a.f[k] + (b.f[k] - a.f[k]) * t;
+            out[m++] = c;
+        }
+    }
+    return m;
+}
+static void FlushBatch()
+{
+    if (g_Verts.empty()) return;
+    RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST,
+        g_Verts.data(), (RwInt32)g_Verts.size(),
+        g_Idx.data(),   (RwInt32)g_Idx.size());
+    g_Verts.clear();
+    g_Idx.clear();
 }
 
 // exposed funcs
@@ -48,9 +97,8 @@ void ImGui_ImplRenderWare_ShutDown()
     g_FontRaster = nullptr;
     io.Fonts->TexID = nullptr;
 
-    delete[] g_pVB;
-    g_pVB = nullptr;
-    g_VertexBufferSize = 0;
+    std::vector<RwIm2DVertex>().swap(g_Verts);
+    std::vector<RwImVertexIndex>().swap(g_Idx);
 }
 void ImGui_ImplRenderWare_NewFrame()
 {
@@ -63,33 +111,11 @@ void ImGui_ImplRenderWare_NewFrame()
 void ImGui_ImplRenderWare_RenderDrawData(ImDrawData* draw_data)
 {
     if (!draw_data || draw_data->CmdListsCount == 0 || draw_data->TotalVtxCount <= 0) return;
-    if (!EnsureVertexBuffer((unsigned int)draw_data->TotalVtxCount)) return;
 
-    const float screenZ      = CSprite2d::NearScreenZ;
-    const float recipCameraZ = CSprite2d::RecipNearClip;
-
-    RwIm2DVertex* vtx_dst = g_pVB;
-    for (int n = 0; n < draw_data->CmdListsCount; n++)
-    {
-        const ImDrawList* cmd_list = draw_data->CmdLists[n];
-        const ImDrawVert* vtx_src  = cmd_list->VtxBuffer.Data;
-        const int count            = cmd_list->VtxBuffer.Size;
-
-        for (int i = 0; i < count; i++, vtx_dst++, vtx_src++)
-        {
-            RwIm2DVertexSetScreenX(vtx_dst, vtx_src->pos.x);
-            RwIm2DVertexSetScreenY(vtx_dst, vtx_src->pos.y);
-            RwIm2DVertexSetScreenZ(vtx_dst, screenZ);
-            RwIm2DVertexSetRecipCameraZ(vtx_dst, recipCameraZ);
-            vtx_dst->emissiveColor = vtx_src->col;
-            RwIm2DVertexSetU(vtx_dst, vtx_src->uv.x, recipCameraZ);
-            RwIm2DVertexSetV(vtx_dst, vtx_src->uv.y, recipCameraZ);
-        }
-    }
+    const float screenZ = CSprite2d::NearScreenZ;
+    const float recipZ  = CSprite2d::RecipNearClip;
 
     void* boundTex = (void*)-1;
-    CRect lastScissor;
-    bool  scissorValid = false;
 
     auto ResetState = [&]()
     {
@@ -105,17 +131,16 @@ void ImGui_ImplRenderWare_RenderDrawData(ImDrawData* draw_data)
         RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF,   (void*)2);
         RwRenderStateSet(rwRENDERSTATETEXTUREFILTER,          (void*)rwFILTERLINEAR);
         RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS,         (void*)rwTEXTUREADDRESSCLAMP);
-        boundTex     = (void*)-1;
-        scissorValid = false;
+        boundTex = (void*)-1;
     };
     ResetState();
 
-    int vtx_offset = 0;
+    g_Verts.clear();
+    g_Idx.clear();
+
     for (int n = 0; n < draw_data->CmdListsCount; n++)
     {
         const ImDrawList* cmd_list = draw_data->CmdLists[n];
-        const ImDrawIdx*  idx_base = cmd_list->IdxBuffer.Data;
-        const int         vtx_cnt  = cmd_list->VtxBuffer.Size;
 
         for (int cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++)
         {
@@ -123,6 +148,7 @@ void ImGui_ImplRenderWare_RenderDrawData(ImDrawData* draw_data)
 
             if (pcmd->UserCallback)
             {
+                FlushBatch();
                 if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
                     ResetState();
                 else
@@ -133,38 +159,65 @@ void ImGui_ImplRenderWare_RenderDrawData(ImDrawData* draw_data)
                 continue;
             }
 
-            if (pcmd->ElemCount == 0 ||
-                pcmd->ClipRect.z <= pcmd->ClipRect.x ||
-                pcmd->ClipRect.w <= pcmd->ClipRect.y)
+            const float cx0 = pcmd->ClipRect.x, cy0 = pcmd->ClipRect.y;
+            const float cx1 = pcmd->ClipRect.z, cy1 = pcmd->ClipRect.w;
+            if (pcmd->ElemCount == 0 || cx1 <= cx0 || cy1 <= cy0)
                 continue;
-
-            CRect scissor(pcmd->ClipRect.x, pcmd->ClipRect.y, pcmd->ClipRect.z, pcmd->ClipRect.w);
-            if (!scissorValid ||
-                scissor.left != lastScissor.left   || scissor.right != lastScissor.right ||
-                scissor.top  != lastScissor.top    || scissor.bottom != lastScissor.bottom)
-            {
-                CWidget::SetScissor(scissor);
-                lastScissor  = scissor;
-                scissorValid = true;
-            }
 
             void* tex = (void*)pcmd->GetTexID();
             if (tex != boundTex)
             {
+                FlushBatch();
                 RwRenderStateSet(rwRENDERSTATETEXTURERASTER, tex);
                 boundTex = tex;
             }
 
-            RwIm2DRenderIndexedPrimitive(rwPRIMTYPETRILIST,
-                &g_pVB[vtx_offset], (RwInt32)vtx_cnt,
-                (RwImVertexIndex*)(idx_base + pcmd->IdxOffset), (RwInt32)pcmd->ElemCount);
+            const ImDrawVert* vtx = cmd_list->VtxBuffer.Data + pcmd->VtxOffset;
+            const ImDrawIdx*  idx = cmd_list->IdxBuffer.Data + pcmd->IdxOffset;
+
+            for (unsigned int i = 0; i + 2 < pcmd->ElemCount; i += 3)
+            {
+                if (g_Verts.size() > 65000) FlushBatch();
+
+                const ImDrawVert& a = vtx[idx[i + 0]];
+                const ImDrawVert& b = vtx[idx[i + 1]];
+                const ImDrawVert& c = vtx[idx[i + 2]];
+
+                float minX = std::min(a.pos.x, std::min(b.pos.x, c.pos.x));
+                float maxX = std::max(a.pos.x, std::max(b.pos.x, c.pos.x));
+                float minY = std::min(a.pos.y, std::min(b.pos.y, c.pos.y));
+                float maxY = std::max(a.pos.y, std::max(b.pos.y, c.pos.y));
+                if (maxX <= cx0 || minX >= cx1 || maxY <= cy0 || minY >= cy1) continue;
+
+                ClipVert t0 = MakeClipVert(a), t1 = MakeClipVert(b), t2 = MakeClipVert(c);
+                if (minX >= cx0 && maxX <= cx1 && minY >= cy0 && maxY <= cy1)
+                {
+                    PushVert(t0, screenZ, recipZ);
+                    PushVert(t1, screenZ, recipZ);
+                    PushVert(t2, screenZ, recipZ);
+                    continue;
+                }
+
+                ClipVert bufA[16], bufB[16];
+                bufA[0] = t0; bufA[1] = t1; bufA[2] = t2;
+                int m = 3;
+                m = ClipPoly(bufA, m, bufB, 0, cx0, true);  if (m < 3) continue;
+                m = ClipPoly(bufB, m, bufA, 0, cx1, false); if (m < 3) continue;
+                m = ClipPoly(bufA, m, bufB, 1, cy0, true);  if (m < 3) continue;
+                m = ClipPoly(bufB, m, bufA, 1, cy1, false); if (m < 3) continue;
+
+                for (int k = 1; k + 1 < m; k++)
+                {
+                    PushVert(bufA[0],     screenZ, recipZ);
+                    PushVert(bufA[k],     screenZ, recipZ);
+                    PushVert(bufA[k + 1], screenZ, recipZ);
+                }
+            }
         }
-        vtx_offset += vtx_cnt;
     }
 
+    FlushBatch();
     RwRenderStateSet(rwRENDERSTATETEXTURERASTER, (void*)0);
-    CRect scissor(0.0f, 0.0f, 0.0f, 0.0f);
-    CWidget::SetScissor(scissor);
 }
 bool ImGui_ImplRenderWare_CreateDeviceObjects()
 {

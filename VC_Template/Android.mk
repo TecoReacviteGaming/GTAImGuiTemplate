@@ -8,7 +8,7 @@ else
     LOCAL_MODULE := VCImGuiTemplate64
 endif
 LOCAL_SRC_FILES := main.cpp mod/logger.cpp
-LOCAL_SRC_FILES += $(wildcard $(LOCAL_PATH)/ocornut/*.cpp)
+LOCAL_SRC_FILES += ocornut/backend/imgui_impl_renderware.cpp $(wildcard $(LOCAL_PATH)/ocornut/*.cpp)
 LOCAL_CXXFLAGS += -O2 -DNDEBUG -std=c++17
 LOCAL_LDLIBS += -llog
 include $(BUILD_SHARED_LIBRARY)
