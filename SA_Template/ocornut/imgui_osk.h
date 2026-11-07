@@ -108,6 +108,8 @@ namespace ImGuiOSK
         if (!visible)
         {
             s.rect = ImRect(0.0f, 0.0f, 0.0f, 0.0f);
+            s.caps = false;
+            s.shift = false;
             return;
         }
 
