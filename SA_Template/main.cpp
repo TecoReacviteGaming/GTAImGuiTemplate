@@ -10,7 +10,6 @@
 #include <aml-psdk/game_sa/entity/Camera.h>
 #include <aml-psdk/game_sa/base/Timer.h>
 #include <aml-psdk/game_sa/engine/OS.h>
-#include <aml-psdk/game_sa/engine/RsGlobal.h>
 
 // macro to exclude ImGui rendering in-menu
 //#define IMGUI_EXCLUDE_MENU
@@ -25,6 +24,37 @@ END_DEPLIST()
 // OWN vars
 uintptr_t g_pGame = 0;
 void* g_hGame = nullptr;
+
+static const ImWchar wholeGlyphRanges[] =
+{
+    0x0020, 0x00FF, // Latin
+    0x0100, 0x024F, // Extended Latin
+    0x0250, 0x02FF, // Phonetic
+    0x0300, 0x036F, // Combining marks
+    0x0370, 0x03FF, // Greek
+    0x0400, 0x052F, // Cyrillic
+    0x0590, 0x05FF, // Hebrew
+    0x0600, 0x06FF, // Arabic
+    0x0900, 0x097F, // Devanagari
+    0x0E00, 0x0E7F, // Thai
+    0x2000, 0x206F, // Punctuation
+    0x20A0, 0x20CF, // Currency
+    0x2100, 0x214F, // Letterlike symbols
+    0x2190, 0x21FF, // Arrows
+    0x2200, 0x22FF, // Mathematics
+    0x2300, 0x23FF, // Technical
+    0x2500, 0x257F, // Box drawing
+    0x2580, 0x259F, // Block elements
+    0x25A0, 0x25FF, // Geometric shapes
+    0x2600, 0x26FF, // Miscellaneous symbols
+    0x2700, 0x27BF, // Dingbats
+    0x3000, 0x30FF, // Japanese
+    0x31F0, 0x31FF, // Katakana extensions
+    0x4E00, 0x9FFF, // CJK ideographs
+    0xAC00, 0xD7A3, // Korean Hangul
+    0xFF00, 0xFFEF, // Fullwidth forms
+    0
+};
 
 char buf[256] = "";
 ImGuiTextBuffer logBuf;
@@ -122,15 +152,18 @@ void RenderImGui()
     // our keyboard, should be first at all times
     ImGuiOSK::ProcessImGuiKeyboard();
 
+    static bool bShowMetrics = false;
+    if (bShowMetrics) ImGui::ShowMetricsWindow();
+
     // your render ImGui code here
     ImGui::SetNextWindowBgAlpha(0.92f);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(io.DisplaySize.x * 0.23f, io.DisplaySize.y * 0.47f), ImVec2(io.DisplaySize.x, io.DisplaySize.y));
+    ImGui::SetNextWindowSizeConstraints(ImVec2(io.DisplaySize.x * 0.30f, io.DisplaySize.y * 0.60f), ImVec2(io.DisplaySize.x, io.DisplaySize.y));
     ImGui::SetNextWindowCollapsed(true, ImGuiCond_FirstUseEver);
     if (ImGui::Begin("ImGui Template (SA)"))
     {
         ImGui::Text("ImGUI version: %s", ImGui::GetVersion());
         ImGui::Text("ImGUI FPS: %.2f", io.Framerate);
-        ImGui::BeginChild("Scrolling", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() - 20.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
+        ImGui::BeginChild("Scrolling", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() - 70.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
         ImGui::TextUnformatted(logBuf.begin());
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
         if (ScrollToBottom)
@@ -152,6 +185,7 @@ void RenderImGui()
         ImGui::PopItemWidth();
         ImGui::SameLine();
         ImGui::Text("%d/%d max", (int)std::strlen(buf), (int)sizeof(buf));
+        ImGui::Checkbox("Show debugger window", &bShowMetrics);
     }
     ImGui::End();
     // ended here
@@ -188,8 +222,8 @@ ON_MOD_LOAD()
         style.ScaleAllSizes(g_UIScale);
         ImGui::StyleColorsDark();
         ImFontConfig config;
-        config.SizePixels = roundf(13.0f * g_UIScale);
-        io.Fonts->AddFontDefault(&config);
+        config.SizePixels = roundf(16.0f * g_UIScale);
+        io.Fonts->AddFontFromFileTTF("/system/fonts/SourceSansPro-Regular.ttf", config.SizePixels, NULL, wholeGlyphRanges);
         // ended here
     };
 #ifndef IMGUI_EXCLUDE_GAME
