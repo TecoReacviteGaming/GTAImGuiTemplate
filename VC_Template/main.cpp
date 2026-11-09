@@ -20,6 +20,11 @@ BEGIN_DEPLIST()
     ADD_DEPENDENCY_VER(net.rusjj.aml, 1.4.0)
 END_DEPLIST()
 
+// OWN vars
+uintptr_t g_pGame = 0;
+void* g_hGame = nullptr;
+RsGlobalType* RsGlobal = nullptr;
+ImFont* g_pDefaultFont = nullptr;
 static const ImWchar wholeGlyphRanges[] =
 {
     0x0020, 0x00FF, // Latin
@@ -50,11 +55,6 @@ static const ImWchar wholeGlyphRanges[] =
     0xFF00, 0xFFEF, // Fullwidth forms
     0
 };
-
-// OWN vars
-uintptr_t g_pGame = 0;
-void* g_hGame = nullptr;
-RsGlobalType* RsGlobal = nullptr;
 
 char buf[256] = "";
 ImGuiTextBuffer logBuf;
@@ -150,7 +150,9 @@ void RenderImGui()
     ImGui::NewFrame();
 
     // our keyboard, should be first at all times
+    ImGui::PushFont(g_pDefaultFont, 40.0f);
     ImGuiOSK::ProcessImGuiKeyboard();
+    ImGui::PopFont();
 
     static bool bShowMetrics = false;
     if (bShowMetrics) ImGui::ShowMetricsWindow();
@@ -226,7 +228,7 @@ ON_MOD_LOAD()
         ImGui::StyleColorsDark();
         ImFontConfig config;
         config.SizePixels = roundf(16.0f * g_UIScale);
-        io.Fonts->AddFontFromFileTTF("/system/fonts/SourceSansPro-Regular.ttf", config.SizePixels, NULL, wholeGlyphRanges);
+        g_pDefaultFont = io.Fonts->AddFontFromFileTTF("/system/fonts/SourceSansPro-Regular.ttf", config.SizePixels, NULL, wholeGlyphRanges);
         // ended here
     };
 #ifndef IMGUI_EXCLUDE_GAME
